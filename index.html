@@ -32,13 +32,11 @@
       <p class="text-xs text-gray-500">100% 本地私隱安全儲存</p>
     </div>
     <select id="catSelect" onchange="switchCat(this.value)" class="bg-white border rounded-lg px-2 py-1 text-sm font-semibold shadow-sm">
-      <!-- Cats options -->
     </select>
   </header>
 
   <!-- Content Container -->
   <main id="appContent">
-    <!-- Dynamic Views -->
   </main>
 
   <!-- Bottom Navigation -->
@@ -58,8 +56,26 @@
   </nav>
 
   <script>
-    // State Initialization
-    let db = JSON.parse(localStorage.getItem('catDB_v2')) || {
+    // 自動相容讀取舊版資料 (嘗試讀取常見舊版 Key 名稱)
+    function loadExistingDB() {
+      const keys = ['catDB', 'catTrackerDB', 'cat_health_db', 'catData', 'catDB_v2'];
+      for (let k of keys) {
+        const item = localStorage.getItem(k);
+        if (item) {
+          try {
+            const parsed = JSON.parse(item);
+            if (parsed && (parsed.cats || parsed.weights || parsed.medical)) {
+              return { key: k, data: parsed };
+            }
+          } catch(e){}
+        }
+      }
+      return null;
+    }
+
+    const loaded = loadExistingDB();
+    let ACTIVE_KEY = loaded ? loaded.key : 'catDB';
+    let db = loaded ? loaded.data : {
       currentCatId: 'default',
       cats: [{ id: 'default', name: '咪咪', age: '', gender: '公' }],
       weights: [],
@@ -68,10 +84,16 @@
       vets: []
     };
 
+    // 補齊可能缺失的新數據陣列
+    if (!db.lifeLogs) db.lifeLogs = [];
+    if (!db.vets) db.vets = [];
+    if (!db.cats || db.cats.length === 0) db.cats = [{ id: 'default', name: '咪咪', age: '', gender: '公' }];
+    if (!db.currentCatId) db.currentCatId = db.cats[0].id;
+
     let currentTab = 'health';
 
     function saveDB() {
-      localStorage.setItem('catDB_v2', JSON.stringify(db));
+      localStorage.setItem(ACTIVE_KEY, JSON.stringify(db));
     }
 
     function init() {
@@ -117,23 +139,21 @@
       lucide.createIcons();
     }
 
-    // --- 1. HEALTH TAB ---
+    // --- HEALTH TAB ---
     function renderHealthTab(container) {
-      const currentCat = db.cats.find(c => c.id === db.currentCatId);
-      const catWeights = db.weights.filter(w => w.catId === db.currentCatId);
-      const catMedical = db.medical.filter(m => m.catId === db.currentCatId);
+      const currentCat = db.cats.find(c => c.id === db.currentCatId) || db.cats[0];
+      const catWeights = (db.weights || []).filter(w => w.catId === currentCat.id || !w.catId);
+      const catMedical = (db.medical || []).filter(m => m.catId === currentCat.id || !m.catId);
 
       container.innerHTML = `
-        <!-- Weight Section -->
         <div class="card p-4 mb-4">
           <h3 class="font-bold mb-2 flex justify-between items-center text-sm">
-            <span>⚖️ 體重紀錄 (${currentCat?.name})</span>
+            <span>⚖️ 體重紀錄 (${currentCat?.name || '貓貓'})</span>
             <button onclick="addWeight()" class="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">+ 紀錄體重</button>
           </h3>
           <div class="h-32 mb-2"><canvas id="weightChart"></canvas></div>
         </div>
 
-        <!-- Medical Section -->
         <div class="card p-4">
           <h3 class="font-bold mb-3 flex justify-between items-center text-sm">
             <span>🩺 醫療與疫苗紀錄</span>
@@ -142,14 +162,14 @@
           <div class="space-y-3">
             ${catMedical.length === 0 ? '<p class="text-xs text-gray-400 text-center py-4">暫無醫療紀錄</p>' : 
               catMedical.map(m => {
-                const vet = db.vets.find(v => v.id === m.vetId);
+                const vet = (db.vets || []).find(v => v.id === m.vetId);
                 return `
                 <div class="border-b pb-2 text-xs">
                   <div class="flex justify-between font-semibold text-gray-700">
-                    <span>${m.date} -${m.type}</span>
+                    <span>${m.date \vert{}\vert{} ''} -${m.type || '看診'}</span>
                     <span class="text-orange-500">${vet ? '📍 ' + vet.name : ''}</span>
                   </div>
-                  <p class="text-gray-600 mt-1">${m.title}</p>${m.note ? `<p class="text-gray-400 mt-0.5">${m.note}</p>` : ''}
+                  <p class="text-gray-600 mt-1">${m.title \vert{}\vert{} m.note \vert{}\vert{} ''}</p>${m.note && m.title ? `<p class="text-gray-400 mt-0.5">${m.note}</p>` : ''}
                 </div>`;
               }).join('')
             }
@@ -173,7 +193,7 @@
       const title = prompt("項目說明 (如：三合一疫苗/皮膚科檢查)：");
       if(!title) return;
       
-      let vetOptions = "選擇診所數字：\n0: 不指定\n" + db.vets.map((v, i) => `${i+1}: ${v.name}`).join('\n');
+      let vetOptions = "選擇診所數字：\n0: 不指定\n" + (db.vets || []).map((v, i) => `${i+1}: ${v.name}`).join('\n');
       const vetChoice = prompt(vetOptions, "0");
       let vetId = "";
       if(vetChoice && parseInt(vetChoice) > 0 && db.vets[parseInt(vetChoice)-1]) {
@@ -192,9 +212,9 @@
       renderCurrentTab();
     }
 
-    // --- 2. LIFE TAB (NEW) ---
+    // --- LIFE TAB ---
     function renderLifeTab(container) {
-      const catLife = db.lifeLogs.filter(l => l.catId === db.currentCatId);
+      const catLife = (db.lifeLogs || []).filter(l => l.catId === db.currentCatId || !l.catId);
 
       container.innerHTML = `
         <div class="card p-4">
@@ -238,7 +258,7 @@
       renderCurrentTab();
     }
 
-    // --- 3. VETS TAB (NEW) ---
+    // --- VETS TAB ---
     function renderVetsTab(container) {
       container.innerHTML = `
         <div class="card p-4">
@@ -251,7 +271,7 @@
           </div>
 
           <div class="space-y-3">
-            ${db.vets.length === 0 ? '<p class="text-xs text-gray-400 text-center py-8">未有診所資料，請點擊右上角新增</p>' : 
+            ${(db.vets || []).length === 0 ? '<p class="text-xs text-gray-400 text-center py-8">未有診所資料，請點擊右上角新增</p>' : 
               db.vets.map(v => `
                 <div class="border p-3 rounded-xl relative">
                   <h4 class="font-bold text-sm text-gray-800">${v.name}</h4>${v.doctor ? `<p class="text-xs text-gray-600 mt-1">👨‍⚕️ 常用醫生：${v.doctor}</p>` : ''}
@@ -279,7 +299,7 @@
       renderCurrentTab();
     }
 
-    // --- 4. SETTINGS TAB ---
+    // --- SETTINGS TAB ---
     function renderSettingsTab(container) {
       container.innerHTML = `
         <div class="card p-4 space-y-4">
@@ -313,8 +333,8 @@
       new Chart(ctx, {
         type: 'line',
         data: {
-          labels: weights.map(w => w.date),
-          datasets: [{ label: '體重(kg)', data: weights.map(w => w.weight), borderColor: '#e07a5f', tension: 0.3 }]
+          labels: weights.map(w => w.date || ''),
+          datasets: [{ label: '體重(kg)', data: weights.map(w => w.weight || 0), borderColor: '#e07a5f', tension: 0.3 }]
         },
         options: { responsive: true, maintainAspectRatio: false }
       });
