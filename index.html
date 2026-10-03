@@ -318,13 +318,76 @@
         </template>
         <p class="text-center text-stone-400 py-2" x-show="!cat.events.length">目前沒有異常事件，太好了 🎉</p>
       </section>
+
+      <!-- ========== 5. 全新加入：生活與診所通訊錄 ========== -->
+      <section x-show="tab==='life'" class="space-y-4">
+        
+        <!-- 生活行為 -->
+        <form class="card p-5 space-y-3" @submit.prevent="saveLife()">
+          <h3 class="font-extrabold text-lg">📘 生活行為紀錄</h3>
+          <p class="text-xs text-stone-400 mb-2">適合紀錄：挑食、情緒轉變、亂尿尿等日常行為</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="lbl">日期</label><input type="date" class="inp" required x-model="lForm.date"></div>
+            <div>
+              <label class="lbl">類別</label>
+              <select class="inp" x-model="lForm.type">
+                <template x-for="t in lifeTypes" :key="t"><option x-text="t"></option></template>
+              </select>
+            </div>
+          </div>
+          <div><label class="lbl">詳細內容</label><textarea rows="2" class="inp" required x-model="lForm.note" placeholder="例如：今日唔肯食罐罐..."></textarea></div>
+          <button class="btn btn-main w-full" type="submit">新增生活紀錄</button>
+        </form>
+
+        <template x-for="l in [...(cat.lifeLogs||[])].sort((a,b)=>b.date.localeCompare(a.date))" :key="l.id">
+          <div class="card p-4 flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="bg-orange-100 text-orange-600 px-2 py-0.5 rounded text-xs font-bold" x-text="l.type"></span>
+              </div>
+              <div class="text-xs text-stone-400 mt-1" x-text="l.date"></div>
+              <p class="text-sm mt-1 whitespace-pre-wrap" x-text="l.note"></p>
+            </div>
+            <button class="btn btn-soft !px-3 !py-1 text-sm" @click="delLife(l.id)">刪除</button>
+          </div>
+        </template>
+        <p class="text-center text-stone-400 py-2" x-show="!(cat.lifeLogs && cat.lifeLogs.length)">暫時無生活行為紀錄</p>
+
+        <!-- 診所通訊錄 -->
+        <form class="card p-5 space-y-3 mt-6" @submit.prevent="saveVet()">
+          <h3 class="font-extrabold text-lg">🏥 診所通訊錄 (急診/備用)</h3>
+          <div><label class="lbl">診所名稱</label><input class="inp" required x-model="vetForm.name" placeholder="例如：24H急診動物醫院"></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="lbl">醫生姓名</label><input class="inp" x-model="vetForm.doctor" placeholder="可留空"></div>
+            <div><label class="lbl">聯絡電話</label><input type="tel" class="inp" x-model="vetForm.phone" placeholder="可留空"></div>
+          </div>
+          <div><label class="lbl">地址/備註</label><input class="inp" x-model="vetForm.note" placeholder="例如：九龍區 / 夜間需加收費"></div>
+          <button class="btn btn-main w-full" type="submit">新增診所</button>
+        </form>
+
+        <template x-for="v in (cat.vets||[])" :key="v.id">
+          <div class="card p-4 flex items-start justify-between gap-2 border-l-4 border-orange-300">
+            <div>
+              <b class="text-lg text-stone-700" x-text="v.name"></b>
+              <div class="text-sm text-stone-600 mt-1" x-show="v.doctor" x-text="'👨‍⚕️ 醫生：' + v.doctor"></div>
+              <div class="text-sm mt-1" x-show="v.phone"><a class="font-bold text-orange-500 underline" :href="'tel:'+v.phone" x-text="'📞 ' + v.phone"></a></div>
+              <div class="text-xs text-stone-400 mt-1" x-show="v.note" x-text="'📍 ' + v.note"></div>
+            </div>
+            <button class="btn btn-soft !px-3 !py-1 text-sm" @click="delVet(v.id)">刪除</button>
+          </div>
+        </template>
+        <p class="text-center text-stone-400 py-2" x-show="!(cat.vets && cat.vets.length)">暫時無診所資料</p>
+
+      </section>
+      <!-- ========== 新增部分完結 ========== -->
+
     </div>
     </template>
   </main>
 
-  <!-- 底部導覽 -->
+  <!-- 底部導覽 (將 grid-cols-4 更改為 grid-cols-5 加入生活分頁) -->
   <nav class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-orange-100 z-30" style="padding-bottom:env(safe-area-inset-bottom)">
-    <div class="max-w-2xl mx-auto grid grid-cols-4 text-xs font-bold text-stone-400">
+    <div class="max-w-2xl mx-auto grid grid-cols-5 text-xs font-bold text-stone-400">
       <template x-for="t in tabs" :key="t.id">
         <button class="tabbtn py-2 flex flex-col items-center gap-0.5" :class="tab===t.id && 'active'" @click="tab=t.id">
           <span class="ico w-10 h-7 rounded-full flex items-center justify-center text-lg" x-text="t.icon"></span>
@@ -389,14 +452,21 @@ function catApp() {
   return {
     data: { cats: [], activeId: null },
     tab: 'home',
+    // 底部導航加入「生活」分頁
     tabs: [
       { id: 'home', icon: '🐱', label: '主頁' },
       { id: 'care', icon: '💊', label: '驅蟲提醒' },
       { id: 'weight', icon: '⚖️', label: '體重' },
       { id: 'medical', icon: '🏥', label: '醫療' },
+      { id: 'life', icon: '📘', label: '生活' }, // <--- 新增
     ],
     medTypes: ['杜虱/防虱藥', '心絲蟲藥', '體內杜蟲藥', '長期慢性病藥物'],
     eventTypes: ['嘔吐', '軟便/腹瀉', '食慾不振', '精神不佳', '咳嗽/打噴嚏', '其他'],
+    
+    // 新增生活類別與表單變數
+    lifeTypes: ['飲食', '行為', '情緒', '環境', '其他'],
+    lForm: {}, vetForm: {},
+
     catModal: false, clinicEdit: false, chart: null,
     cForm: {}, mForm: {}, wForm: {}, vForm: {}, eForm: {},
     confirmBox: null, toastMsg: '', toastTimer: null, backupText: '',
@@ -417,6 +487,7 @@ function catApp() {
         if (!this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats.length ? this.data.cats[0].id : null;
         this.backupText = '';
         this.say('已還原 ' + this.data.cats.length + ' 隻貓貓的資料');
+        window.location.reload(); // 還原後重整畫面確保更新
       });
     },
     ask(msg, fn) { this.confirmBox = { msg, fn }; },
@@ -424,9 +495,22 @@ function catApp() {
     say(msg) { this.toastMsg = msg; clearTimeout(this.toastTimer); this.toastTimer = setTimeout(() => this.toastMsg = '', 2600); },
 
     init() {
-      try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.cats) this.data = s; } catch (e) {}
+      try { 
+        const s = JSON.parse(localStorage.getItem(KEY)); 
+        if (s && s.cats) {
+          // 自動幫舊資料升級，加入新的儲存格
+          s.cats.forEach(c => {
+            if (!c.lifeLogs) c.lifeLogs = [];
+            if (!c.vets) c.vets = [];
+          });
+          this.data = s; 
+        } 
+      } catch (e) {}
+      
       if (this.data.cats.length && !this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats[0].id;
-      this.resetMed(); this.resetWeight(); this.resetVaccine(); this.resetEvent();
+      this.resetMed(); this.resetWeight(); this.resetVaccine(); this.resetEvent(); 
+      this.resetLife(); this.resetVet(); // 載入新功能表單
+
       this.$watch('data', () => {
         try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { this.say('儲存空間不足，請嘗試移除較大的相片'); }
         this.$nextTick(() => this.drawChart());
@@ -494,7 +578,7 @@ function catApp() {
         const c = this.data.cats.find(x => x.id === this.cForm.id);
         Object.assign(c, { name: this.cForm.name, birth: this.cForm.birth, gender: this.cForm.gender, breed: this.cForm.breed, chip: this.cForm.chip, photo: this.cForm.photo });
       } else {
-        const c = { ...this.cForm, id: uid(), meds: [], weights: [], vaccines: [], events: [], clinic: { name: '', vet: '', phone: '', address: '' } };
+        const c = { ...this.cForm, id: uid(), meds: [], weights: [], vaccines: [], events: [], lifeLogs: [], vets: [], clinic: { name: '', vet: '', phone: '', address: '' } };
         this.data.cats.push(c); this.data.activeId = c.id; this.tab = 'home';
       }
       this.catModal = false;
@@ -534,6 +618,7 @@ function catApp() {
         weights: [-120, -90, -60, -30, 0].map((o, i) => ({ id: uid(), date: this.addDays(t, o), kg: [3.9, 4.0, 4.1, 4.15, 4.2][i], note: '' })),
         vaccines: [{ id: uid(), name: '三合一', date: this.addDays(t, -360), next: this.addDays(t, 5) }],
         events: [{ id: uid(), date: this.addDays(t, -2), type: '軟便/腹瀉', note: '今天早上軟便一次，精神正常。' }],
+        lifeLogs: [], vets: [], // 初始化空陣列
         clinic: { name: '暖暖動物醫院', vet: '王醫師', phone: '0212345678', address: '' },
       });
       this.data.activeId = id;
@@ -601,6 +686,23 @@ function catApp() {
     saveEvent() { this.cat.events.push({ id: uid(), ...this.eForm }); this.resetEvent(); },
     delEvent(id) { this.ask('確定刪除這筆事件？', () => { this.cat.events = this.cat.events.filter(e => e.id !== id); }); },
     eventIcon(t) { return { '嘔吐': '🤮', '軟便/腹瀉': '💩', '食慾不振': '🍽️', '精神不佳': '😿', '咳嗽/打噴嚏': '🤧' }[t] || '📌'; },
+
+    // ========== 新增功能區塊 JavaScript ==========
+    resetLife() { this.lForm = { date: this.today(), type: this.lifeTypes[0], note: '' }; },
+    saveLife() {
+      if (!this.cat.lifeLogs) this.cat.lifeLogs = [];
+      this.cat.lifeLogs.push({ id: uid(), ...this.lForm });
+      this.resetLife();
+    },
+    delLife(id) { this.ask('確定刪除這筆生活紀錄？', () => { this.cat.lifeLogs = this.cat.lifeLogs.filter(l => l.id !== id); }); },
+
+    resetVet() { this.vetForm = { name: '', doctor: '', phone: '', note: '' }; },
+    saveVet() {
+      if (!this.cat.vets) this.cat.vets = [];
+      this.cat.vets.push({ id: uid(), ...this.vetForm });
+      this.resetVet();
+    },
+    delVet(id) { this.ask('確定刪除這間診所資料？', () => { this.cat.vets = this.cat.vets.filter(v => v.id !== id); }); },
   };
 }
 </script>
