@@ -1,346 +1,609 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>貓貓健康與生活紀錄器</title>
-  
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="貓貓紀錄">
-  <meta name="theme-color" content="#faf9f5">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>貓貓健康記錄器</title>
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js"></script>
+<!-- PWA Web App 設定：讓手機可以加到桌面 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="貓貓記錄器">
+<meta name="theme-color" content="#faf9f5">
 
-  <style>
-    :root { --bg:#faf9f5; --card:#ffffff; --accent:#e07a5f; --text:#3d405b; }
-    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 80px; }
-    .nav-btn.active { color: var(--accent); font-weight: bold; }
-    .card { background: var(--card); border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-  </style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&family=Noto+Sans+TC:wght@400;500;700;800&display=swap">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<style>
+  :root { --bg:#fff7f2; --fg:#5b4a42; --peach:#f9a98f; --cream:#fde8df; --mint:#bfe8c9; --font-display:"Huninn","Noto Sans TC",sans-serif; --font-body:"Noto Sans TC",system-ui,sans-serif; color-scheme: light; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); padding-inline:0; -webkit-tap-highlight-color: transparent; }
+  h1,h2,h3,h4 { font-family: var(--font-display); }
+  input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible { outline:3px solid var(--peach); outline-offset:2px; }
+  [x-cloak] { display:none !important; }
+  .card { background:#fff; border-radius:1.5rem; box-shadow:0 6px 20px rgba(240,160,140,.15); }
+  .inp { width:100%; border:2px solid #fde2d8; background:#fffaf7; border-radius:1rem; padding:.6rem .9rem; outline:none; font-size:16px; }
+  .inp:focus { border-color:#f9a98f; }
+  .btn { border-radius:9999px; padding:.55rem 1.1rem; font-weight:700; transition:transform .1s; }
+  .btn:active { transform:scale(.95); }
+  .btn-main { background:#f9a98f; color:#fff; }
+  .btn-soft { background:#fde8df; color:#c4725a; }
+  .btn-green { background:#bfe8c9; color:#2f7a45; }
+  .lbl { font-size:.8rem; color:#a08a80; margin-bottom:.2rem; display:block; }
+  .tabbtn.active { color:#f26f4e; }
+  .tabbtn.active .ico { background:#fde8df; }
+</style>
 </head>
-<body class="max-w-md mx-auto p-4">
+<body>
 
-  <!-- Header -->
-  <header class="flex justify-between items-center mb-6 pt-2">
-    <div>
-      <h1 class="text-2xl font-bold flex items-center gap-2">
-        <span>🐾</span> 貓貓健康與生活紀錄
-      </h1>
-      <p class="text-xs text-gray-500">100% 本地私隱安全儲存</p>
-    </div>
-    <select id="catSelect" onchange="switchCat(this.value)" class="bg-white border rounded-lg px-2 py-1 text-sm font-semibold shadow-sm">
-    </select>
+<div class="min-h-screen pb-28" x-data="catApp()" x-init="init()" x-cloak>
+
+  <!-- 頂部標題 -->
+  <header class="px-4 pt-5 pb-2 max-w-2xl mx-auto flex items-center justify-between">
+    <h1 class="text-xl font-extrabold text-orange-400">🐾 貓貓健康記錄器</h1>
+    <template x-if="data.cats.length">
+      <select class="inp !w-auto !py-1.5 !text-sm font-bold" x-model="data.activeId">
+        <template x-for="c in data.cats" :key="c.id"><option :value="c.id" x-text="c.name"></option></template>
+      </select>
+    </template>
   </header>
+  <p class="px-4 max-w-2xl mx-auto text-xs" style="color:#a08a80">📱 資料已自動儲存在手機本機 (獨立 App 模式)</p>
 
-  <!-- Content Container -->
-  <main id="appContent">
+  <main class="px-4 max-w-2xl mx-auto space-y-4">
+
+    <!-- 全域提醒橫幅 -->
+    <template x-if="alerts.length">
+      <div class="space-y-2">
+        <template x-for="a in alerts" :key="a.key">
+          <div class="rounded-2xl px-4 py-3 text-sm font-bold flex items-start gap-2 shadow-sm"
+               :class="a.days<0 ? 'bg-red-100 text-red-700 border-2 border-red-200' : 'bg-yellow-100 text-yellow-800 border-2 border-yellow-200'">
+            <span x-text="a.days<0 ? '⚠️' : '⏰'"></span>
+            <span x-text="a.text"></span>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <!-- 沒有貓貓 -->
+    <template x-if="!cat">
+      <div class="card p-8 text-center space-y-4 mt-6">
+        <div class="text-6xl">🐱</div>
+        <p class="font-bold">還沒有貓貓資料，先來新增一位家人吧！</p>
+        <div class="flex gap-2 justify-center flex-wrap">
+          <button class="btn btn-main" @click="openCat()">＋ 新增貓貓</button>
+          <button class="btn btn-soft" @click="loadDemo()">載入範例資料</button>
+        </div>
+      </div>
+    </template>
+
+    <template x-if="cat">
+    <div class="space-y-4">
+
+      <!-- ========== 1. 主頁 ========== -->
+      <section x-show="tab==='home'" class="space-y-4">
+        <div class="card p-5 text-center">
+          <div class="w-28 h-28 rounded-full mx-auto bg-orange-100 border-4 border-orange-200 overflow-hidden flex items-center justify-center text-5xl">
+            <template x-if="cat.photo"><img :src="cat.photo" class="w-full h-full object-cover"></template>
+            <template x-if="!cat.photo"><span>🐱</span></template>
+          </div>
+          <h2 class="mt-3 text-2xl font-extrabold" x-text="cat.name"></h2>
+          <p class="text-sm text-orange-400 font-bold" x-text="age(cat.birth)"></p>
+          <div class="grid grid-cols-2 gap-2 mt-4 text-left text-sm">
+            <div class="bg-orange-50 rounded-2xl p-3"><span class="lbl">出生日期</span><b x-text="cat.birth || '—'"></b></div>
+            <div class="bg-orange-50 rounded-2xl p-3"><span class="lbl">性別</span><b x-text="cat.gender || '—'"></b></div>
+            <div class="bg-orange-50 rounded-2xl p-3"><span class="lbl">品種</span><b x-text="cat.breed || '—'"></b></div>
+            <div class="bg-orange-50 rounded-2xl p-3"><span class="lbl">晶片號碼</span><b class="break-all" x-text="cat.chip || '—'"></b></div>
+          </div>
+          <div class="flex gap-2 justify-center mt-4 flex-wrap">
+            <button class="btn btn-soft" @click="openCat(cat)">✏️ 編輯</button>
+            <button class="btn btn-main" @click="openCat()">＋ 新增貓貓</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="card p-4 text-center">
+            <div class="text-2xl">⚖️</div><span class="lbl">最近體重</span>
+            <b class="text-lg" x-text="latestWeight ? latestWeight.kg + ' kg' : '尚無紀錄'"></b>
+            <div class="text-xs text-stone-400" x-text="latestWeight ? latestWeight.date : ''"></div>
+          </div>
+          <div class="card p-4 text-center">
+            <div class="text-2xl">💊</div><span class="lbl">下次驅蟲/藥物</span>
+            <b class="text-lg" x-text="nextMedSummary.date || '尚無紀錄'"></b>
+            <div class="text-xs text-stone-400" x-text="nextMedSummary.name"></div>
+          </div>
+          <div class="card p-4 text-center">
+            <div class="text-2xl">💉</div><span class="lbl">下次打針</span>
+            <b class="text-lg" x-text="nextVaccineSummary.date || '尚無紀錄'"></b>
+            <div class="text-xs text-stone-400" x-text="nextVaccineSummary.name"></div>
+          </div>
+        </div>
+
+        <div class="card p-5 space-y-3">
+          <h3 class="font-extrabold text-lg">💾 資料備份與還原</h3>
+          <p class="text-sm" style="color:#a08a80">所有資料自動儲存在手機本地。換手機時，可複製下方備份碼貼到新手機進行還原：</p>
+          <textarea id="backupBox" rows="3" class="inp text-xs" x-model="backupText" placeholder="備份碼會顯示在這裡；還原時把備份碼貼在這裡"></textarea>
+          <div class="flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-main" @click="copyBackup()">複製備份碼</button>
+            <button type="button" class="btn btn-soft" @click="restoreBackup()">從備份碼還原</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== 2. 驅蟲與預防藥 ========== -->
+      <section x-show="tab==='care'" class="space-y-4">
+        <form class="card p-5 space-y-3" @submit.prevent="saveMed()">
+          <h3 class="font-extrabold text-lg" x-text="mForm.id ? '✏️ 編輯藥物' : '💊 新增驅蟲／預防藥'"></h3>
+          <div>
+            <label class="lbl">藥物類型</label>
+            <select class="inp" x-model="mForm.type">
+              <template x-for="t in medTypes" :key="t"><option x-text="t"></option></template>
+            </select>
+          </div>
+          <div>
+            <label class="lbl">藥物名稱（如 Revolution、Bravecto）</label>
+            <input class="inp" required x-model="mForm.name" placeholder="例如：Revolution">
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="lbl">服藥週期</label>
+              <select class="inp" x-model="mForm.cycle">
+                <option value="30">每 30 天</option><option value="60">每 60 天</option>
+                <option value="90">每 90 天</option><option value="180">每 180 天</option>
+                <option value="365">每 365 天</option><option value="custom">自訂天數</option>
+              </select>
+            </div>
+            <div>
+              <label class="lbl">上次服藥日期</label>
+              <input type="date" class="inp" required x-model="mForm.last">
+            </div>
+          </div>
+          <div x-show="mForm.cycle==='custom'">
+            <label class="lbl">自訂週期（天）</label>
+            <input type="number" min="1" class="inp" x-model="mForm.custom" placeholder="例如：14">
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-main flex-1" type="submit" x-text="mForm.id ? '儲存修改' : '新增'"></button>
+            <button type="button" class="btn btn-soft" x-show="mForm.id" @click="resetMed()">取消</button>
+          </div>
+        </form>
+
+        <template x-if="!cat.meds.length"><p class="text-center text-stone-400 py-4">還沒有藥物紀錄 🐟</p></template>
+        <template x-for="m in sortedMeds" :key="m.id">
+          <div class="card p-4 space-y-3" :class="statusOf(m).key==='red' ? 'ring-2 ring-red-200' : ''">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <span class="text-xs bg-orange-100 text-orange-500 rounded-full px-2 py-0.5 font-bold" x-text="m.type"></span>
+                <h4 class="font-extrabold text-lg mt-1" x-text="m.name"></h4>
+              </div>
+              <span class="text-xs font-bold rounded-full px-3 py-1 whitespace-nowrap" :class="statusOf(m).cls" x-text="statusOf(m).label"></span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-sm text-center">
+              <div class="bg-orange-50 rounded-xl p-2"><span class="lbl">週期</span><b x-text="'每 '+m.cycle+' 天'"></b></div>
+              <div class="bg-orange-50 rounded-xl p-2"><span class="lbl">上次</span><b x-text="m.last"></b></div>
+              <div class="bg-orange-50 rounded-xl p-2"><span class="lbl">下次</span><b x-text="nextDate(m)"></b></div>
+            </div>
+            <div class="text-sm text-stone-500" x-text="statusOf(m).detail"></div>
+            <div class="flex gap-2 flex-wrap">
+              <button class="btn btn-green" @click="markFed(m)">✅ 今日已餵藥</button>
+              <button class="btn btn-soft" @click="editMed(m)">編輯</button>
+              <button class="btn btn-soft" @click="delMed(m.id)">刪除</button>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <!-- ========== 3. 體重 ========== -->
+      <section x-show="tab==='weight'" class="space-y-4">
+        <form class="card p-5 space-y-3" @submit.prevent="saveWeight()">
+          <h3 class="font-extrabold text-lg" x-text="wForm.id ? '✏️ 編輯體重' : '⚖️ 記錄體重'"></h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="lbl">日期</label><input type="date" class="inp" required x-model="wForm.date"></div>
+            <div><label class="lbl">體重 (kg)</label><input type="number" step="0.01" min="0" class="inp" required x-model="wForm.kg" placeholder="4.20"></div>
+          </div>
+          <div><label class="lbl">備註</label><input class="inp" x-model="wForm.note" placeholder="例如：剛吃完飯"></div>
+          <div class="flex gap-2">
+            <button class="btn btn-main flex-1" type="submit" x-text="wForm.id ? '儲存修改' : '新增'"></button>
+            <button type="button" class="btn btn-soft" x-show="wForm.id" @click="resetWeight()">取消</button>
+          </div>
+        </form>
+
+        <div class="card p-4">
+          <h3 class="font-extrabold mb-2">📈 體重變化趨勢</h3>
+          <div class="relative h-60"><canvas id="weightChart"></canvas></div>
+          <p class="text-center text-stone-400 text-sm mt-2" x-show="cat.weights.length<1">新增體重紀錄後會顯示折線圖</p>
+        </div>
+
+        <div class="card p-4">
+          <h3 class="font-extrabold mb-2">📋 歷史紀錄</h3>
+          <template x-for="w in [...cat.weights].sort((a,b)=>b.date.localeCompare(a.date))" :key="w.id">
+            <div class="flex items-center justify-between py-2 border-b border-orange-50 last:border-0">
+              <div>
+                <b x-text="w.kg+' kg'"></b>
+                <span class="text-xs text-stone-400 ml-2" x-text="w.date"></span>
+                <div class="text-xs text-stone-500" x-text="w.note"></div>
+              </div>
+              <div class="flex gap-1">
+                <button class="btn btn-soft !px-3 !py-1 text-sm" @click="editWeight(w)">編輯</button>
+                <button class="btn btn-soft !px-3 !py-1 text-sm" @click="delWeight(w.id)">刪除</button>
+              </div>
+            </div>
+          </template>
+          <p class="text-center text-stone-400 py-3" x-show="!cat.weights.length">還沒有體重紀錄 🐟</p>
+        </div>
+      </section>
+
+      <!-- ========== 4. 醫療與事件 ========== -->
+      <section x-show="tab==='medical'" class="space-y-4">
+        <!-- 診所 -->
+        <div class="card p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-extrabold text-lg">🏥 主診獸醫與診所</h3>
+            <button class="btn btn-soft !py-1 text-sm" @click="clinicEdit=!clinicEdit" x-text="clinicEdit?'完成':'編輯'"></button>
+          </div>
+          <template x-if="!clinicEdit">
+            <div class="space-y-1 text-sm">
+              <p><span class="lbl inline">診所：</span><b x-text="cat.clinic.name || '—'"></b></p>
+              <p><span class="lbl inline">獸醫：</span><b x-text="cat.clinic.vet || '—'"></b></p>
+              <p><span class="lbl inline">電話：</span>
+                <template x-if="cat.clinic.phone"><a class="font-bold text-orange-500 underline" :href="'tel:'+cat.clinic.phone" x-text="cat.clinic.phone"></a></template>
+                <template x-if="!cat.clinic.phone"><b>—</b></template></p>
+              <p><span class="lbl inline">地址：</span><b x-text="cat.clinic.address || '—'"></b></p>
+            </div>
+          </template>
+          <template x-if="clinicEdit">
+            <div class="space-y-2">
+              <input class="inp" placeholder="診所名稱" x-model="cat.clinic.name">
+              <input class="inp" placeholder="獸醫姓名" x-model="cat.clinic.vet">
+              <input class="inp" type="tel" placeholder="聯絡電話" x-model="cat.clinic.phone">
+              <input class="inp" placeholder="地址" x-model="cat.clinic.address">
+            </div>
+          </template>
+        </div>
+
+        <!-- 疫苗 -->
+        <form class="card p-5 space-y-3" @submit.prevent="saveVaccine()">
+          <h3 class="font-extrabold text-lg">💉 疫苗與預防針日誌</h3>
+          <div>
+            <label class="lbl">疫苗名稱</label>
+            <input class="inp" list="vaccList" required x-model="vForm.name" placeholder="例如：三合一">
+            <datalist id="vaccList"><option value="三合一"><option value="狂犬病"><option value="四合一"><option value="貓白血病"></datalist>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="lbl">打針日期</label><input type="date" class="inp" required x-model="vForm.date"></div>
+            <div><label class="lbl">下次打針提醒</label><input type="date" class="inp" x-model="vForm.next"></div>
+          </div>
+          <button class="btn btn-main w-full" type="submit">新增疫苗紀錄</button>
+        </form>
+
+        <template x-for="v in [...cat.vaccines].sort((a,b)=>b.date.localeCompare(a.date))" :key="v.id">
+          <div class="card p-4 flex items-center justify-between gap-2">
+            <div>
+              <b x-text="'💉 '+v.name"></b>
+              <div class="text-sm text-stone-500" x-text="'打針：'+v.date"></div>
+              <div class="text-sm" x-show="v.next">
+                <span x-text="'下次：'+v.next"></span>
+                <span class="text-xs font-bold rounded-full px-2 py-0.5 ml-1" :class="vStatus(v).cls" x-text="vStatus(v).label"></span>
+              </div>
+            </div>
+            <button class="btn btn-soft !px-3 !py-1 text-sm" @click="delVaccine(v.id)">刪除</button>
+          </div>
+        </template>
+
+        <!-- 事件 -->
+        <form class="card p-5 space-y-3" @submit.prevent="saveEvent()">
+          <h3 class="font-extrabold text-lg">📝 日常異常事件</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="lbl">日期</label><input type="date" class="inp" required x-model="eForm.date"></div>
+            <div>
+              <label class="lbl">類型</label>
+              <select class="inp" x-model="eForm.type">
+                <template x-for="t in eventTypes" :key="t"><option x-text="t"></option></template>
+              </select>
+            </div>
+          </div>
+          <div><label class="lbl">詳細描述</label><textarea rows="2" class="inp" x-model="eForm.note" placeholder="次數、顏色、狀況…"></textarea></div>
+          <button class="btn btn-main w-full" type="submit">新增事件</button>
+        </form>
+
+        <template x-for="e in [...cat.events].sort((a,b)=>b.date.localeCompare(a.date))" :key="e.id">
+          <div class="card p-4 flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2"><span class="text-xl" x-text="eventIcon(e.type)"></span><b x-text="e.type"></b></div>
+              <div class="text-xs text-stone-400" x-text="e.date"></div>
+              <p class="text-sm mt-1 whitespace-pre-wrap" x-text="e.note"></p>
+            </div>
+            <button class="btn btn-soft !px-3 !py-1 text-sm" @click="delEvent(e.id)">刪除</button>
+          </div>
+        </template>
+        <p class="text-center text-stone-400 py-2" x-show="!cat.events.length">目前沒有異常事件，太好了 🎉</p>
+      </section>
+    </div>
+    </template>
   </main>
 
-  <!-- Bottom Navigation -->
-  <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t flex justify-around py-3 px-2 z-50 text-xs text-gray-500">
-    <button onclick="switchTab('health')" id="nav-health" class="nav-btn active flex flex-col items-center gap-1">
-      <i data-lucide="activity" class="w-5 h-5"></i>健康紀錄
-    </button>
-    <button onclick="switchTab('life')" id="nav-life" class="nav-btn flex flex-col items-center gap-1">
-      <i data-lucide="book-open" class="w-5 h-5"></i>生活行為
-    </button>
-    <button onclick="switchTab('vets')" id="nav-vets" class="nav-btn flex flex-col items-center gap-1">
-      <i data-lucide="building-2" class="w-5 h-5"></i>診所通訊錄
-    </button>
-    <button onclick="switchTab('settings')" id="nav-settings" class="nav-btn flex flex-col items-center gap-1">
-      <i data-lucide="settings" class="w-5 h-5"></i>設定/備份
-    </button>
+  <!-- 底部導覽 -->
+  <nav class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-orange-100 z-30" style="padding-bottom:env(safe-area-inset-bottom)">
+    <div class="max-w-2xl mx-auto grid grid-cols-4 text-xs font-bold text-stone-400">
+      <template x-for="t in tabs" :key="t.id">
+        <button class="tabbtn py-2 flex flex-col items-center gap-0.5" :class="tab===t.id && 'active'" @click="tab=t.id">
+          <span class="ico w-10 h-7 rounded-full flex items-center justify-center text-lg" x-text="t.icon"></span>
+          <span x-text="t.label"></span>
+        </button>
+      </template>
+    </div>
   </nav>
 
-  <script>
-    // 自動相容讀取舊版資料 (嘗試讀取常見舊版 Key 名稱)
-    function loadExistingDB() {
-      const keys = ['catDB', 'catTrackerDB', 'cat_health_db', 'catData', 'catDB_v2'];
-      for (let k of keys) {
-        const item = localStorage.getItem(k);
-        if (item) {
-          try {
-            const parsed = JSON.parse(item);
-            if (parsed && (parsed.cats || parsed.weights || parsed.medical)) {
-              return { key: k, data: parsed };
-            }
-          } catch(e){}
+  <!-- 貓貓資料 Modal -->
+  <div class="fixed inset-0 z-40 bg-black/30 flex items-end sm:items-center justify-center p-0 sm:p-4" x-show="catModal" x-transition.opacity @click.self="catModal=false">
+    <form class="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-3 max-h-[92vh] overflow-y-auto" @submit.prevent="saveCat()">
+      <h3 class="font-extrabold text-lg" x-text="cForm.id ? '✏️ 編輯貓貓資料' : '🐱 新增貓貓'"></h3>
+      <div class="flex items-center gap-3">
+        <div class="w-20 h-20 rounded-full bg-orange-100 border-4 border-orange-200 overflow-hidden flex items-center justify-center text-3xl shrink-0">
+          <template x-if="cForm.photo"><img :src="cForm.photo" class="w-full h-full object-cover"></template>
+          <template x-if="!cForm.photo"><span>🐱</span></template>
+        </div>
+        <div class="space-y-1">
+          <input type="file" accept="image/*" class="text-sm" @change="pickPhoto($event)">
+          <button type="button" class="text-xs text-orange-500 underline" x-show="cForm.photo" @click="cForm.photo=''">移除相片</button>
+        </div>
+      </div>
+      <div><label class="lbl">名字</label><input class="inp" required x-model="cForm.name" placeholder="咪咪"></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="lbl">出生日期</label><input type="date" class="inp" x-model="cForm.birth"></div>
+        <div>
+          <label class="lbl">性別</label>
+          <select class="inp" x-model="cForm.gender">
+            <option value="">未填寫</option><option>男生</option><option>女生</option><option>男生（已絕育）</option><option>女生（已絕育）</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="lbl">品種</label><input class="inp" x-model="cForm.breed" placeholder="例如：英國短毛貓"></div>
+      <div><label class="lbl">晶片號碼</label><input class="inp" inputmode="numeric" x-model="cForm.chip" placeholder="15 位數字"></div>
+      <div class="flex gap-2 pt-1">
+        <button class="btn btn-main flex-1" type="submit">儲存</button>
+        <button type="button" class="btn btn-soft" @click="catModal=false">取消</button>
+      </div>
+      <button type="button" class="w-full text-sm text-red-400 underline pt-1" x-show="cForm.id" @click="delCat()">刪除這隻貓貓的所有資料</button>
+    </form>
+  </div>
+
+  <div class="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" x-show="confirmBox" x-transition.opacity @click.self="confirmBox=null">
+    <div class="bg-white rounded-3xl p-5 w-full max-w-sm space-y-4 text-center" style="color:var(--fg)">
+      <div class="text-4xl">🐾</div>
+      <p class="font-bold" x-text="confirmBox ? confirmBox.msg : ''"></p>
+      <div class="flex gap-2">
+        <button type="button" class="btn btn-soft flex-1" @click="confirmBox=null">取消</button>
+        <button type="button" class="btn btn-main flex-1" @click="yes()">確定</button>
+      </div>
+    </div>
+  </div>
+  <div class="fixed left-1/2 -translate-x-1/2 z-50 rounded-full px-4 py-2 text-sm font-bold shadow-lg max-w-[90vw] text-center" style="bottom:5.5rem;background:var(--fg);color:#fff" x-show="toastMsg" x-transition x-text="toastMsg"></div>
+</div>
+
+<script>
+const KEY = 'catHealthTracker_standalone_v1';
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function catApp() {
+  return {
+    data: { cats: [], activeId: null },
+    tab: 'home',
+    tabs: [
+      { id: 'home', icon: '🐱', label: '主頁' },
+      { id: 'care', icon: '💊', label: '驅蟲提醒' },
+      { id: 'weight', icon: '⚖️', label: '體重' },
+      { id: 'medical', icon: '🏥', label: '醫療' },
+    ],
+    medTypes: ['杜虱/防虱藥', '心絲蟲藥', '體內杜蟲藥', '長期慢性病藥物'],
+    eventTypes: ['嘔吐', '軟便/腹瀉', '食慾不振', '精神不佳', '咳嗽/打噴嚏', '其他'],
+    catModal: false, clinicEdit: false, chart: null,
+    cForm: {}, mForm: {}, wForm: {}, vForm: {}, eForm: {},
+    confirmBox: null, toastMsg: '', toastTimer: null, backupText: '',
+
+    copyBackup() {
+      this.backupText = JSON.stringify(this.data);
+      const sel = () => this.$nextTick(() => { const b = document.getElementById('backupBox'); if (b) { b.focus(); b.select(); } });
+      try {
+        navigator.clipboard.writeText(this.backupText).then(() => this.say('已複製備份碼，請貼到備忘錄保存'), () => { sel(); this.say('請長按文字框，全選後手動複製'); });
+      } catch (e) { sel(); this.say('請長按文字框，全選後手動複製'); }
+    },
+    restoreBackup() {
+      let d;
+      try { d = JSON.parse(this.backupText.trim()); } catch (e) { return this.say('備份碼格式不正確，請重新貼上完整內容'); }
+      if (!d || !Array.isArray(d.cats)) return this.say('這不是有效的備份碼');
+      this.ask('還原會取代目前所有資料，確定嗎？', () => {
+        this.data = d;
+        if (!this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats.length ? this.data.cats[0].id : null;
+        this.backupText = '';
+        this.say('已還原 ' + this.data.cats.length + ' 隻貓貓的資料');
+      });
+    },
+    ask(msg, fn) { this.confirmBox = { msg, fn }; },
+    yes() { const b = this.confirmBox; this.confirmBox = null; if (b && b.fn) b.fn(); },
+    say(msg) { this.toastMsg = msg; clearTimeout(this.toastTimer); this.toastTimer = setTimeout(() => this.toastMsg = '', 2600); },
+
+    init() {
+      try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.cats) this.data = s; } catch (e) {}
+      if (this.data.cats.length && !this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats[0].id;
+      this.resetMed(); this.resetWeight(); this.resetVaccine(); this.resetEvent();
+      this.$watch('data', () => {
+        try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { this.say('儲存空間不足，請嘗試移除較大的相片'); }
+        this.$nextTick(() => this.drawChart());
+      }, { deep: true });
+      this.$watch('tab', () => this.$nextTick(() => this.drawChart()));
+      this.$watch('data.activeId', () => { this.clinicEdit = false; this.resetMed(); this.resetWeight(); this.$nextTick(() => this.drawChart()); });
+    },
+
+    today() { const d = new Date(); return this.iso(d); },
+    iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); },
+    parse(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); },
+    addDays(s, n) { const d = this.parse(s); d.setDate(d.getDate() + Number(n)); return this.iso(d); },
+    diffDays(s) { return Math.round((this.parse(s) - this.parse(this.today())) / 86400000); },
+    age(b) {
+      if (!b) return '';
+      const bd = this.parse(b), n = new Date();
+      let m = (n.getFullYear() - bd.getFullYear()) * 12 + n.getMonth() - bd.getMonth();
+      if (n.getDate() < bd.getDate()) m--;
+      if (m < 0) return '';
+      const y = Math.floor(m / 12), r = m % 12;
+      return y ? `${y} 歲${r ? ' ' + r + ' 個月' : ''}` : `${r} 個月大`;
+    },
+
+    get cat() { return this.data.cats.find(c => c.id === this.data.activeId) || null; },
+    get latestWeight() {
+      if (!this.cat || !this.cat.weights.length) return null;
+      return [...this.cat.weights].sort((a, b) => b.date.localeCompare(a.date))[0];
+    },
+    get sortedMeds() { return [...this.cat.meds].sort((a, b) => this.nextDate(a).localeCompare(this.nextDate(b))); },
+    get nextMedSummary() {
+      if (!this.cat || !this.cat.meds.length) return {};
+      const m = this.sortedMeds[0];
+      return { date: this.nextDate(m), name: m.name };
+    },
+    get nextVaccineSummary() {
+      if (!this.cat) return {};
+      const l = this.cat.vaccines.filter(v => v.next).sort((a, b) => a.next.localeCompare(b.next));
+      const upcoming = l.find(v => this.diffDays(v.next) >= 0) || l[0];
+      return upcoming ? { date: upcoming.next, name: upcoming.name } : {};
+    },
+    get alerts() {
+      const out = [];
+      for (const c of this.data.cats) {
+        for (const m of c.meds) {
+          const d = this.diffDays(this.nextDate(m));
+          if (d < 0) out.push({ key: 'm' + m.id, days: d, text: `⚠️ ${c.name} 的 ${m.name} 已逾期 ${-d} 天！請盡快餵藥` });
+          else if (d <= 7) out.push({ key: 'm' + m.id, days: d, text: d === 0 ? `⏰ ${c.name} 的 ${m.name} 今天到期，記得餵藥！` : `⏰ ${c.name} 的 ${m.name} 將在 ${d} 天後到期` });
+        }
+        for (const v of c.vaccines) {
+          if (!v.next) continue;
+          const d = this.diffDays(v.next);
+          if (d < 0) out.push({ key: 'v' + v.id, days: d, text: `⚠️ ${c.name} 的 ${v.name} 疫苗已逾期 ${-d} 天！請盡快預約打針` });
+          else if (d <= 7) out.push({ key: 'v' + v.id, days: d, text: d === 0 ? `⏰ ${c.name} 的 ${v.name} 疫苗今天要打針！` : `⏰ ${c.name} 的 ${v.name} 疫苗將在 ${d} 天後到期` });
         }
       }
-      return null;
-    }
+      return out.sort((a, b) => a.days - b.days);
+    },
 
-    const loaded = loadExistingDB();
-    let ACTIVE_KEY = loaded ? loaded.key : 'catDB';
-    let db = loaded ? loaded.data : {
-      currentCatId: 'default',
-      cats: [{ id: 'default', name: '咪咪', age: '', gender: '公' }],
-      weights: [],
-      medical: [],
-      lifeLogs: [],
-      vets: []
-    };
-
-    // 補齊可能缺失的新數據陣列
-    if (!db.lifeLogs) db.lifeLogs = [];
-    if (!db.vets) db.vets = [];
-    if (!db.cats || db.cats.length === 0) db.cats = [{ id: 'default', name: '咪咪', age: '', gender: '公' }];
-    if (!db.currentCatId) db.currentCatId = db.cats[0].id;
-
-    let currentTab = 'health';
-
-    function saveDB() {
-      localStorage.setItem(ACTIVE_KEY, JSON.stringify(db));
-    }
-
-    function init() {
-      renderCatSelect();
-      switchTab('health');
-      lucide.createIcons();
-    }
-
-    function renderCatSelect() {
-      const select = document.getElementById('catSelect');
-      select.innerHTML = db.cats.map(c => `<option value="${c.id}" ${c.id === db.currentCatId ? 'selected' : ''}>${c.name}</option>`).join('') + `<option value="ADD_NEW">+ 新增貓貓</option>`;
-    }
-
-    function switchCat(id) {
-      if(id === 'ADD_NEW') {
-        const name = prompt("請輸入新貓貓名字：");
-        if(name) {
-          const newId = 'cat_' + Date.now();
-          db.cats.push({ id: newId, name, age: '', gender: '公' });
-          db.currentCatId = newId;
-          saveDB();
-        }
+    openCat(c) {
+      this.cForm = c ? { ...c } : { id: null, name: '', birth: '', gender: '', breed: '', chip: '', photo: '' };
+      this.catModal = true;
+    },
+    saveCat() {
+      if (this.cForm.id) {
+        const c = this.data.cats.find(x => x.id === this.cForm.id);
+        Object.assign(c, { name: this.cForm.name, birth: this.cForm.birth, gender: this.cForm.gender, breed: this.cForm.breed, chip: this.cForm.chip, photo: this.cForm.photo });
       } else {
-        db.currentCatId = id;
+        const c = { ...this.cForm, id: uid(), meds: [], weights: [], vaccines: [], events: [], clinic: { name: '', vet: '', phone: '', address: '' } };
+        this.data.cats.push(c); this.data.activeId = c.id; this.tab = 'home';
       }
-      renderCatSelect();
-      renderCurrentTab();
-    }
-
-    function switchTab(tab) {
-      currentTab = tab;
-      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-      document.getElementById(`nav-${tab}`).classList.add('active');
-      renderCurrentTab();
-    }
-
-    function renderCurrentTab() {
-      const container = document.getElementById('appContent');
-      if (currentTab === 'health') renderHealthTab(container);
-      else if (currentTab === 'life') renderLifeTab(container);
-      else if (currentTab === 'vets') renderVetsTab(container);
-      else if (currentTab === 'settings') renderSettingsTab(container);
-      lucide.createIcons();
-    }
-
-    // --- HEALTH TAB ---
-    function renderHealthTab(container) {
-      const currentCat = db.cats.find(c => c.id === db.currentCatId) || db.cats[0];
-      const catWeights = (db.weights || []).filter(w => w.catId === currentCat.id || !w.catId);
-      const catMedical = (db.medical || []).filter(m => m.catId === currentCat.id || !m.catId);
-
-      container.innerHTML = `
-        <div class="card p-4 mb-4">
-          <h3 class="font-bold mb-2 flex justify-between items-center text-sm">
-            <span>⚖️ 體重紀錄 (${currentCat?.name || '貓貓'})</span>
-            <button onclick="addWeight()" class="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">+ 紀錄體重</button>
-          </h3>
-          <div class="h-32 mb-2"><canvas id="weightChart"></canvas></div>
-        </div>
-
-        <div class="card p-4">
-          <h3 class="font-bold mb-3 flex justify-between items-center text-sm">
-            <span>🩺 醫療與疫苗紀錄</span>
-            <button onclick="addMedical()" class="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full">+ 新增紀錄</button>
-          </h3>
-          <div class="space-y-3">
-            ${catMedical.length === 0 ? '<p class="text-xs text-gray-400 text-center py-4">暫無醫療紀錄</p>' : 
-              catMedical.map(m => {
-                const vet = (db.vets || []).find(v => v.id === m.vetId);
-                return `
-                <div class="border-b pb-2 text-xs">
-                  <div class="flex justify-between font-semibold text-gray-700">
-                    <span>${m.date \vert{}\vert{} ''} -${m.type || '看診'}</span>
-                    <span class="text-orange-500">${vet ? '📍 ' + vet.name : ''}</span>
-                  </div>
-                  <p class="text-gray-600 mt-1">${m.title \vert{}\vert{} m.note \vert{}\vert{} ''}</p>${m.note && m.title ? `<p class="text-gray-400 mt-0.5">${m.note}</p>` : ''}
-                </div>`;
-              }).join('')
-            }
-          </div>
-        </div>
-      `;
-      initChart(catWeights);
-    }
-
-    function addWeight() {
-      const w = prompt("請輸入體重 (kg)：");
-      if(w) {
-        db.weights.push({ catId: db.currentCatId, date: new Date().toISOString().split('T')[0], weight: parseFloat(w) });
-        saveDB();
-        renderCurrentTab();
-      }
-    }
-
-    function addMedical() {
-      const type = prompt("類型 (如：打針/看診/體檢/驅蟲)：", "打針");
-      const title = prompt("項目說明 (如：三合一疫苗/皮膚科檢查)：");
-      if(!title) return;
-      
-      let vetOptions = "選擇診所數字：\n0: 不指定\n" + (db.vets || []).map((v, i) => `${i+1}: ${v.name}`).join('\n');
-      const vetChoice = prompt(vetOptions, "0");
-      let vetId = "";
-      if(vetChoice && parseInt(vetChoice) > 0 && db.vets[parseInt(vetChoice)-1]) {
-        vetId = db.vets[parseInt(vetChoice)-1].id;
-      }
-
-      const note = prompt("備註/醫囑 (可留空)：", "");
-
-      db.medical.push({
-        id: Date.now(),
-        catId: db.currentCatId,
-        date: new Date().toISOString().split('T')[0],
-        type, title, vetId, note
+      this.catModal = false;
+    },
+    delCat() {
+      const id = this.cForm.id;
+      this.ask('確定要刪除「' + this.cForm.name + '」的所有資料嗎？此動作無法復原。', () => {
+        this.data.cats = this.data.cats.filter(c => c.id !== id);
+        this.data.activeId = this.data.cats.length ? this.data.cats[0].id : null;
+        this.catModal = false;
       });
-      saveDB();
-      renderCurrentTab();
-    }
-
-    // --- LIFE TAB ---
-    function renderLifeTab(container) {
-      const catLife = (db.lifeLogs || []).filter(l => l.catId === db.currentCatId || !l.catId);
-
-      container.innerHTML = `
-        <div class="card p-4">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <h3 class="font-bold text-sm">📘 生活與行為紀錄</h3>
-              <p class="text-xs text-gray-400">紀錄挑食、情緒、特別行為等日常</p>
-            </div>
-            <button onclick="addLifeLog()" class="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg shadow">+ 新增紀錄</button>
-          </div>
-
-          <div class="space-y-4">
-            ${catLife.length === 0 ? '<p class="text-xs text-gray-400 text-center py-8">暫無生活紀錄，快點擊右上角新增吧！</p>' : 
-              catLife.map(l => `
-                <div class="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                  <div class="flex justify-between items-center text-xs text-gray-500 mb-1">
-                    <span class="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-semibold">${l.category}</span>
-                    <span>${l.date}</span>
-                  </div>
-                  <p class="text-sm font-medium text-gray-800 mt-1">${l.content}</p>
-                </div>
-              `).join('')
-            }
-          </div>
-        </div>
-      `;
-    }
-
-    function addLifeLog() {
-      const category = prompt("請選擇類別 (如：飲食/行為/情緒/環境/其他)：", "行為");
-      const content = prompt("請輸入詳細紀錄內容：");
-      if(!content) return;
-
-      db.lifeLogs.unshift({
-        id: Date.now(),
-        catId: db.currentCatId,
-        date: new Date().toISOString().split('T')[0],
-        category, content
+    },
+    pickPhoto(ev) {
+      const f = ev.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S;
+          const ctx = cv.getContext('2d'), m = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, S, S);
+          this.cForm.photo = cv.toDataURL('image/jpeg', 0.8);
+        };
+        img.src = e.target.result;
+      };
+      r.readAsDataURL(f);
+    },
+    loadDemo() {
+      const t = this.today(), id = uid();
+      this.data.cats.push({
+        id, name: '咪咪', birth: this.addDays(t, -900), gender: '女生（已絕育）', breed: '英國短毛貓', chip: '900123456789012', photo: '',
+        meds: [
+          { id: uid(), name: 'Revolution 大寵愛', type: '杜虱/防虱藥', cycle: 30, last: this.addDays(t, -33) },
+          { id: uid(), name: 'Bravecto', type: '杜虱/防虱藥', cycle: 90, last: this.addDays(t, -85) },
+          { id: uid(), name: '心絲蟲預防藥', type: '心絲蟲藥', cycle: 30, last: this.addDays(t, -10) },
+        ],
+        weights: [-120, -90, -60, -30, 0].map((o, i) => ({ id: uid(), date: this.addDays(t, o), kg: [3.9, 4.0, 4.1, 4.15, 4.2][i], note: '' })),
+        vaccines: [{ id: uid(), name: '三合一', date: this.addDays(t, -360), next: this.addDays(t, 5) }],
+        events: [{ id: uid(), date: this.addDays(t, -2), type: '軟便/腹瀉', note: '今天早上軟便一次，精神正常。' }],
+        clinic: { name: '暖暖動物醫院', vet: '王醫師', phone: '0212345678', address: '' },
       });
-      saveDB();
-      renderCurrentTab();
-    }
+      this.data.activeId = id;
+    },
 
-    // --- VETS TAB ---
-    function renderVetsTab(container) {
-      container.innerHTML = `
-        <div class="card p-4">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <h3 class="font-bold text-sm">🏥 獸醫診所通訊錄</h3>
-              <p class="text-xs text-gray-400">管理常用診所及急診資訊</p>
-            </div>
-            <button onclick="addVet()" class="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg shadow">+ 新增診所</button>
-          </div>
+    nextDate(m) { return this.addDays(m.last, m.cycle); },
+    statusOf(m) {
+      const d = this.diffDays(this.nextDate(m));
+      if (d < 0) return { key: 'red', label: '🔴 已逾期', cls: 'bg-red-100 text-red-600', detail: `已逾期 ${-d} 天，請盡快餵藥！` };
+      if (d <= 7) return { key: 'yellow', label: '🟡 即將到期', cls: 'bg-yellow-100 text-yellow-700', detail: d === 0 ? '今天到期！' : `還有 ${d} 天到期` };
+      return { key: 'green', label: '🟢 正常', cls: 'bg-green-100 text-green-700', detail: `還有 ${d} 天才需要下次服藥` };
+    },
+    vStatus(v) {
+      const d = this.diffDays(v.next);
+      if (d < 0) return { label: '🔴 已逾期', cls: 'bg-red-100 text-red-600' };
+      if (d <= 7) return { label: '🟡 即將到期', cls: 'bg-yellow-100 text-yellow-700' };
+      return { label: '🟢 正常', cls: 'bg-green-100 text-green-700' };
+    },
+    resetMed() { this.mForm = { id: null, name: '', type: this.medTypes[0], cycle: '30', custom: '', last: this.today() }; },
+    saveMed() {
+      const cycle = this.mForm.cycle === 'custom' ? Number(this.mForm.custom) : Number(this.mForm.cycle);
+      if (!cycle || cycle < 1) return this.say('請輸入有效的服藥週期');
+      const item = { id: this.mForm.id || uid(), name: this.mForm.name.trim(), type: this.mForm.type, cycle, last: this.mForm.last };
+      const i = this.cat.meds.findIndex(m => m.id === item.id);
+      if (i >= 0) this.cat.meds[i] = item; else this.cat.meds.push(item);
+      this.resetMed();
+    },
+    editMed(m) {
+      const preset = ['30', '60', '90', '180', '365'].includes(String(m.cycle));
+      this.mForm = { id: m.id, name: m.name, type: m.type, cycle: preset ? String(m.cycle) : 'custom', custom: preset ? '' : m.cycle, last: m.last };
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    markFed(m) { m.last = this.today(); },
+    delMed(id) { this.ask('確定刪除這筆藥物紀錄？', () => { this.cat.meds = this.cat.meds.filter(m => m.id !== id); }); },
 
-          <div class="space-y-3">
-            ${(db.vets || []).length === 0 ? '<p class="text-xs text-gray-400 text-center py-8">未有診所資料，請點擊右上角新增</p>' : 
-              db.vets.map(v => `
-                <div class="border p-3 rounded-xl relative">
-                  <h4 class="font-bold text-sm text-gray-800">${v.name}</h4>${v.doctor ? `<p class="text-xs text-gray-600 mt-1">👨‍⚕️ 常用醫生：${v.doctor}</p>` : ''}
-                  ${v.phone ? `<p class="text-xs text-blue-600 mt-1"><a href="tel:${v.phone}" class="flex items-center gap-1">📞 ${v.phone} (點擊撥號)</a></p>` : ''}
-                  ${v.address ? `<p class="text-xs text-gray-500 mt-1">📍 ${v.address}</p>` : ''}
-                  ${v.note ? `<p class="text-xs text-gray-400 mt-1 bg-gray-50 p-1.5 rounded">💡 ${v.note}</p>` : ''}
-                </div>
-              `).join('')
-            }
-          </div>
-        </div>
-      `;
-    }
-
-    function addVet() {
-      const name = prompt("診所名稱 (例如：XX動物醫院)：");
-      if(!name) return;
-      const phone = prompt("電話號碼：", "");
-      const doctor = prompt("主治/推薦醫生姓名 (可留空)：", "");
-      const address = prompt("診所地址 (可留空)：", "");
-      const note = prompt("備註 (例如：24小時急診 / 需要提前預約)：", "");
-
-      db.vets.push({ id: 'vet_' + Date.now(), name, phone, doctor, address, note });
-      saveDB();
-      renderCurrentTab();
-    }
-
-    // --- SETTINGS TAB ---
-    function renderSettingsTab(container) {
-      container.innerHTML = `
-        <div class="card p-4 space-y-4">
-          <h3 class="font-bold text-sm">⚙️ 資料管理與備份</h3>
-          <button onclick="exportData()" class="w-full bg-gray-800 text-white text-xs py-2.5 rounded-lg font-medium">複製資料備份碼</button>
-          <button onclick="importData()" class="w-full border border-gray-300 text-xs py-2.5 rounded-lg font-medium">匯入備份資料</button>
-        </div>
-      `;
-    }
-
-    function exportData() {
-      navigator.clipboard.writeText(JSON.stringify(db));
-      alert("備份資料已複製到剪貼簿！");
-    }
-
-    function importData() {
-      const code = prompt("請貼上備份資料碼：");
-      if(code) {
-        try {
-          db = JSON.parse(code);
-          saveDB();
-          alert("匯入成功！");
-          location.reload();
-        } catch(e) { alert("無效的資料格式！"); }
-      }
-    }
-
-    function initChart(weights) {
-      const ctx = document.getElementById('weightChart');
-      if(!ctx) return;
-      new Chart(ctx, {
+    resetWeight() { this.wForm = { id: null, date: this.today(), kg: '', note: '' }; },
+    saveWeight() {
+      const item = { id: this.wForm.id || uid(), date: this.wForm.date, kg: Number(this.wForm.kg), note: this.wForm.note };
+      const i = this.cat.weights.findIndex(w => w.id === item.id);
+      if (i >= 0) this.cat.weights[i] = item; else this.cat.weights.push(item);
+      this.resetWeight();
+    },
+    editWeight(w) { this.wForm = { ...w }; window.scrollTo({ top: 0, behavior: 'smooth' }); },
+    delWeight(id) { this.ask('確定刪除這筆體重紀錄？', () => { this.cat.weights = this.cat.weights.filter(w => w.id !== id); }); },
+    drawChart() {
+      if (this.tab !== 'weight' || !this.cat) return;
+      const cv = document.getElementById('weightChart'); if (!cv) return;
+      const ws = [...this.cat.weights].sort((a, b) => a.date.localeCompare(b.date));
+      if (this.chart) { this.chart.destroy(); this.chart = null; }
+      this.chart = new Chart(cv, {
         type: 'line',
         data: {
-          labels: weights.map(w => w.date || ''),
-          datasets: [{ label: '體重(kg)', data: weights.map(w => w.weight || 0), borderColor: '#e07a5f', tension: 0.3 }]
+          labels: ws.map(w => w.date.slice(5)),
+          datasets: [{ label: '體重 (kg)', data: ws.map(w => w.kg), borderColor: '#f9a98f', backgroundColor: 'rgba(249,169,143,.2)', fill: true, tension: .35, pointBackgroundColor: '#fff', pointBorderColor: '#f26f4e', pointBorderWidth: 2, pointRadius: 5 }]
         },
-        options: { responsive: true, maintainAspectRatio: false }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => ws[i[0].dataIndex].date } } }, scales: { y: { title: { display: true, text: 'kg' } } } }
       });
-    }
+    },
 
-    window.onload = init;
-  </script>
+    resetVaccine() { this.vForm = { name: '', date: this.today(), next: '' }; },
+    saveVaccine() { this.cat.vaccines.push({ id: uid(), ...this.vForm }); this.resetVaccine(); },
+    delVaccine(id) { this.ask('確定刪除這筆疫苗紀錄？', () => { this.cat.vaccines = this.cat.vaccines.filter(v => v.id !== id); }); },
+
+    resetEvent() { this.eForm = { date: this.today(), type: this.eventTypes[0], note: '' }; },
+    saveEvent() { this.cat.events.push({ id: uid(), ...this.eForm }); this.resetEvent(); },
+    delEvent(id) { this.ask('確定刪除這筆事件？', () => { this.cat.events = this.cat.events.filter(e => e.id !== id); }); },
+    eventIcon(t) { return { '嘔吐': '🤮', '軟便/腹瀉': '💩', '食慾不振': '🍽️', '精神不佳': '😿', '咳嗽/打噴嚏': '🤧' }[t] || '📌'; },
+  };
+}
+</script>
+
 </body>
 </html>
