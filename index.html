@@ -37,7 +37,8 @@
 </head>
 <body>
 
-<div class="min-h-screen pb-28" x-data="catApp()" x-init="init()" x-cloak>
+<!-- 修改 1：已移除 x-init="init()"，Alpine 會自動執行 init() -->
+<div class="min-h-screen pb-28" x-data="catApp()" x-cloak>
 
   <!-- 頂部標題 -->
   <header class="px-4 pt-5 pb-2 max-w-2xl mx-auto flex items-center justify-between">
@@ -319,9 +320,9 @@
         <p class="text-center text-stone-400 py-2" x-show="!cat.events.length">目前沒有異常事件，太好了 🎉</p>
       </section>
 
-      <!-- ========== 5. 全新加入：生活與診所通訊錄 ========== -->
+      <!-- ========== 5. 生活與診所通訊錄 ========== -->
       <section x-show="tab==='life'" class="space-y-4">
-        
+
         <!-- 生活行為 -->
         <form class="card p-5 space-y-3" @submit.prevent="saveLife()">
           <h3 class="font-extrabold text-lg">📘 生活行為紀錄</h3>
@@ -379,13 +380,12 @@
         <p class="text-center text-stone-400 py-2" x-show="!(cat.vets && cat.vets.length)">暫時無診所資料</p>
 
       </section>
-      <!-- ========== 新增部分完結 ========== -->
 
     </div>
     </template>
   </main>
 
-  <!-- 底部導覽 (將 grid-cols-4 更改為 grid-cols-5 加入生活分頁) -->
+  <!-- 底部導覽 -->
   <nav class="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur border-t border-orange-100 z-30" style="padding-bottom:env(safe-area-inset-bottom)">
     <div class="max-w-2xl mx-auto grid grid-cols-5 text-xs font-bold text-stone-400">
       <template x-for="t in tabs" :key="t.id">
@@ -448,26 +448,27 @@
 const KEY = 'catHealthTracker_standalone_v1';
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+// 修改 2：圖表放喺 Alpine 外面，避免被 Alpine 包成 Proxy 而畫唔出
+let weightChart = null;
+
 function catApp() {
   return {
     data: { cats: [], activeId: null },
     tab: 'home',
-    // 底部導航加入「生活」分頁
     tabs: [
       { id: 'home', icon: '🐱', label: '主頁' },
       { id: 'care', icon: '💊', label: '驅蟲提醒' },
       { id: 'weight', icon: '⚖️', label: '體重' },
       { id: 'medical', icon: '🏥', label: '醫療' },
-      { id: 'life', icon: '📘', label: '生活' }, // <--- 新增
+      { id: 'life', icon: '📘', label: '生活' },
     ],
     medTypes: ['杜虱/防虱藥', '心絲蟲藥', '體內杜蟲藥', '長期慢性病藥物'],
     eventTypes: ['嘔吐', '軟便/腹瀉', '食慾不振', '精神不佳', '咳嗽/打噴嚏', '其他'],
-    
-    // 新增生活類別與表單變數
     lifeTypes: ['飲食', '行為', '情緒', '環境', '其他'],
     lForm: {}, vetForm: {},
 
-    catModal: false, clinicEdit: false, chart: null,
+    // 已移除 chart: null
+    catModal: false, clinicEdit: false,
     cForm: {}, mForm: {}, wForm: {}, vForm: {}, eForm: {},
     confirmBox: null, toastMsg: '', toastTimer: null, backupText: '',
 
@@ -483,11 +484,11 @@ function catApp() {
       try { d = JSON.parse(this.backupText.trim()); } catch (e) { return this.say('備份碼格式不正確，請重新貼上完整內容'); }
       if (!d || !Array.isArray(d.cats)) return this.say('這不是有效的備份碼');
       this.ask('還原會取代目前所有資料，確定嗎？', () => {
-        this.data = d;
-        if (!this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats.length ? this.data.cats[0].id : null;
-        this.backupText = '';
-        this.say('已還原 ' + this.data.cats.length + ' 隻貓貓的資料');
-        window.location.reload(); // 還原後重整畫面確保更新
+        if (!d.cats.find(c => c.id === d.activeId)) d.activeId = d.cats.length ? d.cats[0].id : null;
+        // 先直接寫入本機儲存，再重整，確保資料不會因為重整太快而冇save到
+        try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { return this.say('儲存空間不足，還原失敗'); }
+        this.say('已還原 ' + d.cats.length + ' 隻貓貓的資料');
+        setTimeout(() => window.location.reload(), 300);
       });
     },
     ask(msg, fn) { this.confirmBox = { msg, fn }; },
@@ -495,28 +496,29 @@ function catApp() {
     say(msg) { this.toastMsg = msg; clearTimeout(this.toastTimer); this.toastTimer = setTimeout(() => this.toastMsg = '', 2600); },
 
     init() {
-      try { 
-        const s = JSON.parse(localStorage.getItem(KEY)); 
+      try {
+        const s = JSON.parse(localStorage.getItem(KEY));
         if (s && s.cats) {
           // 自動幫舊資料升級，加入新的儲存格
           s.cats.forEach(c => {
             if (!c.lifeLogs) c.lifeLogs = [];
             if (!c.vets) c.vets = [];
           });
-          this.data = s; 
-        } 
+          this.data = s;
+        }
       } catch (e) {}
-      
+
       if (this.data.cats.length && !this.data.cats.find(c => c.id === this.data.activeId)) this.data.activeId = this.data.cats[0].id;
-      this.resetMed(); this.resetWeight(); this.resetVaccine(); this.resetEvent(); 
-      this.resetLife(); this.resetVet(); // 載入新功能表單
+      this.resetMed(); this.resetWeight(); this.resetVaccine(); this.resetEvent();
+      this.resetLife(); this.resetVet();
 
       this.$watch('data', () => {
         try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { this.say('儲存空間不足，請嘗試移除較大的相片'); }
         this.$nextTick(() => this.drawChart());
       }, { deep: true });
-      this.$watch('tab', () => this.$nextTick(() => this.drawChart()));
-      this.$watch('data.activeId', () => { this.clinicEdit = false; this.resetMed(); this.resetWeight(); this.$nextTick(() => this.drawChart()); });
+      // 修改 3：切換分頁後等畫面顯示完先畫圖
+      this.$watch('tab', () => setTimeout(() => this.drawChart(), 50));
+      this.$watch('data.activeId', () => { this.clinicEdit = false; this.resetMed(); this.resetWeight(); setTimeout(() => this.drawChart(), 50); });
     },
 
     today() { const d = new Date(); return this.iso(d); },
@@ -618,7 +620,7 @@ function catApp() {
         weights: [-120, -90, -60, -30, 0].map((o, i) => ({ id: uid(), date: this.addDays(t, o), kg: [3.9, 4.0, 4.1, 4.15, 4.2][i], note: '' })),
         vaccines: [{ id: uid(), name: '三合一', date: this.addDays(t, -360), next: this.addDays(t, 5) }],
         events: [{ id: uid(), date: this.addDays(t, -2), type: '軟便/腹瀉', note: '今天早上軟便一次，精神正常。' }],
-        lifeLogs: [], vets: [], // 初始化空陣列
+        lifeLogs: [], vets: [],
         clinic: { name: '暖暖動物醫院', vet: '王醫師', phone: '0212345678', address: '' },
       });
       this.data.activeId = id;
@@ -663,12 +665,14 @@ function catApp() {
     },
     editWeight(w) { this.wForm = { ...w }; window.scrollTo({ top: 0, behavior: 'smooth' }); },
     delWeight(id) { this.ask('確定刪除這筆體重紀錄？', () => { this.cat.weights = this.cat.weights.filter(w => w.id !== id); }); },
+
     drawChart() {
       if (this.tab !== 'weight' || !this.cat) return;
+      if (typeof Chart === 'undefined') return;
       const cv = document.getElementById('weightChart'); if (!cv) return;
       const ws = [...this.cat.weights].sort((a, b) => a.date.localeCompare(b.date));
-      if (this.chart) { this.chart.destroy(); this.chart = null; }
-      this.chart = new Chart(cv, {
+      if (weightChart) { weightChart.destroy(); weightChart = null; }
+      weightChart = new Chart(cv, {
         type: 'line',
         data: {
           labels: ws.map(w => w.date.slice(5)),
@@ -687,7 +691,7 @@ function catApp() {
     delEvent(id) { this.ask('確定刪除這筆事件？', () => { this.cat.events = this.cat.events.filter(e => e.id !== id); }); },
     eventIcon(t) { return { '嘔吐': '🤮', '軟便/腹瀉': '💩', '食慾不振': '🍽️', '精神不佳': '😿', '咳嗽/打噴嚏': '🤧' }[t] || '📌'; },
 
-    // ========== 新增功能區塊 JavaScript ==========
+    // ========== 生活與診所通訊錄 ==========
     resetLife() { this.lForm = { date: this.today(), type: this.lifeTypes[0], note: '' }; },
     saveLife() {
       if (!this.cat.lifeLogs) this.cat.lifeLogs = [];
