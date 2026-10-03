@@ -293,6 +293,7 @@
     </nav>
   </template>
 
+  <  <!-- 智能兼容 Alpine.js 邏輯 -->
   <script>
     function catApp() {
       return {
@@ -499,24 +500,59 @@
           });
         },
 
+        // 💡 智能兼容版還原邏輯
         restoreData() {
-          if (!this.restoreCode.trim()) return;
+          if (!this.restoreCode || !this.restoreCode.trim()) return;
+          const input = this.restoreCode.trim();
+          let parsed = null;
+
+          // 方式 1: 嘗試直接 JSON 解析
           try {
-            const decoded = JSON.parse(decodeURIComponent(escape(atob(this.restoreCode.trim()))));
-            if (decoded.cats) {
-              this.cats = decoded.cats;
-              this.currentCatId = this.cats[0] ? this.cats[0].id : null;
-              this.save();
-              alert('還原成功！');
-              this.restoreCode = '';
-              this.drawChart();
+            parsed = JSON.parse(input);
+          } catch (e) {
+            // 方式 2: 嘗試 Base64 + UTF-8 解密
+            try {
+              let str = atob(input);
+              try { str = decodeURIComponent(escape(str)); } catch(err) {}
+              parsed = JSON.parse(str);
+            } catch (e2) {
+              // 方式 3: 嘗試 URIComponent Base64 解密
+              try {
+                let str = decodeURIComponent(atob(input));
+                parsed = JSON.parse(str);
+              } catch(e3) {}
             }
-          } catch(e) {
-            alert('備份碼格式錯誤。');
+          }
+
+          if (!parsed) {
+            alert('備份碼無法解密，請確保冇複製漏字。');
+            return;
+          }
+
+          // 自動適應各種舊資料結構 (Array, Object, {cats: [...]})
+          let loadedCats = [];
+          if (Array.isArray(parsed)) {
+            loadedCats = parsed;
+          } else if (parsed.cats && Array.isArray(parsed.cats)) {
+            loadedCats = parsed.cats;
+          } else if (parsed.name || parsed.id) {
+            loadedCats = [parsed];
+          }
+
+          if (loadedCats.length > 0) {
+            this.cats = loadedCats;
+            this.currentCatId = this.cats[0].id || Date.now();
+            this.save();
+            alert('🎉 還原成功！所有貓貓資料完美返嚟啦！');
+            this.restoreCode = '';
+            this.$nextTick(() => { this.drawChart(); });
+          } else {
+            alert('備份碼解密成功，但找不到貓貓紀錄資料。');
           }
         }
       }
     }
   </script>
+
 </body>
 </html>
